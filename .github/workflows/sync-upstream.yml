@@ -1,0 +1,19 @@
+name: Sync with upstream
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # Upstream commits that touch .github/workflows can only be merged with a
+      # token that has the `workflow` scope, so SYNC_TOKEN is preferred.
+      - run: gh api "repos/$GITHUB_REPOSITORY/merge-upstream" -f branch=master
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}

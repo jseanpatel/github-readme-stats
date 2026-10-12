@@ -17,6 +17,18 @@ import { renderError } from "../src/common/render.js";
 import { fetchStats } from "../src/fetchers/stats.js";
 import { isLocaleAvailable } from "../src/translations.js";
 
+const RANK_PERCENTILES = {
+  S: 0.5,
+  "A+": 6,
+  A: 18,
+  "A-": 31,
+  "B+": 43,
+  B: 56,
+  "B-": 68,
+  "C+": 81,
+  C: 93,
+};
+
 // @ts-ignore
 export default async (req, res) => {
   const {
@@ -48,6 +60,8 @@ export default async (req, res) => {
     border_color,
     rank_icon,
     show,
+    count_private,
+    rank_level,
   } = req.query;
   res.setHeader("Content-Type", "image/svg+xml");
 
@@ -94,7 +108,14 @@ export default async (req, res) => {
       showStats.includes("discussions_started"),
       showStats.includes("discussions_answered"),
       parseInt(commits_year, 10),
+      parseBoolean(count_private),
     );
+    if (rank_level && RANK_PERCENTILES[rank_level] !== undefined) {
+      stats.rank = {
+        level: rank_level,
+        percentile: RANK_PERCENTILES[rank_level],
+      };
+    }
     const cacheSeconds = resolveCacheSeconds({
       requested: parseInt(cache_seconds, 10),
       def: CACHE_TTL.STATS_CARD.DEFAULT,
