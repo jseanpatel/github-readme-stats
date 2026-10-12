@@ -214,6 +214,50 @@ const totalCommitsFetcher = async (username) => {
 };
 
 /**
+ * Fetch all-time commit contributions, including private ones, by summing
+ * yearly contribution collections since the account was created.
+ *
+ * @param {string} username GitHub username.
+ * @returns {Promise<number>} Total commit contributions.
+ */
+const allTimeContributionsFetcher = async (username) => {
+  const graphql = (query) => (variables, token) =>
+    request({ query, variables }, { Authorization: `bearer ${token}` });
+
+  const created = await retryer(
+    graphql(`
+      query ($login: String!) {
+        user(login: $login) {
+          createdAt
+        }
+      }
+    `),
+    { login: username },
+  );
+  const firstYear = new Date(created.data.data.user.createdAt).getUTCFullYear();
+  const currentYear = new Date().getUTCFullYear();
+
+  const years = [];
+  for (let year = firstYear; year <= currentYear; year++) {
+    years.push(
+      `y${year}: contributionsCollection(from: "${year}-01-01T00:00:00Z", to: "${year}-12-31T23:59:59Z") { totalCommitContributions restrictedContributionsCount }`,
+    );
+  }
+  const res = await retryer(
+    graphql(
+      `query($login: String!) { user(login: $login) { ${years.join(" ")} } }`,
+    ),
+    { login: username },
+  );
+
+  return Object.values(res.data.data.user).reduce(
+    (total, year) =>
+      total + year.totalCommitContributions + year.restrictedContributionsCount,
+    0,
+  );
+};
+
+/**
  * Fetch stats for a given username.
  *
  * @param {string} username GitHub username.
@@ -289,12 +333,14 @@ const fetchStats = async (
   stats.name = user.name || user.login;
 
   // if include_all_commits, fetch all commits using the REST API.
-  if (include_all_commits) {
+  if (include_all_commits && count_private) {
+    stats.totalCommits = await allTimeContributionsFetcher(username);
+  } else if (include_all_commits) {
     stats.totalCommits = await totalCommitsFetcher(username);
   } else {
     stats.totalCommits = user.commits.totalCommitContributions;
   }
-  if (count_private) {
+  if (count_private && !include_all_commits) {
     stats.totalCommits += user.commits.restrictedContributionsCount;
   }
 
